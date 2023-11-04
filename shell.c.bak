@@ -1,0 +1,70 @@
+#include "parser/ast.h"
+#include "shell.h"
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <unistd.h>
+
+char* current_working_directory;
+char* new_directory;
+
+void initialize(void)
+{
+    //new_directory = malloc(1);
+    new_directory = getenv("PWD");
+    current_working_directory = malloc(strlen(new_directory) + 1);
+    if (current_working_directory) {
+        strcpy(current_working_directory, new_directory);
+    }
+
+    /* This code will be called once at startup */
+    if (prompt){
+        prompt = (char*)malloc(256);
+        sprintf(prompt, "unix_shell %s $ ", current_working_directory);
+    }
+
+}
+
+void run_command(node_t *node)
+{
+    /* Print parsed input for testing - comment this when running the tests! */
+    //print_tree(node);
+
+
+    if (node->type == NODE_COMMAND) {
+        char *program = node->command.program;
+        char **argv = node->command.argv;
+
+        if (strcmp(program, "cd") == 0) {
+            // Handle the 'cd' built-in command
+            if (argv[1] != NULL) {
+                if (chdir(argv[1]) != 0) {
+                    perror("cd"); // Print an error message if chdir fails
+                }
+            } else {
+                // Handle 'cd' without arguments (optional)
+                // You can choose to implement this or not
+                // Change to the home directory or print an error
+                // Example: chdir(getenv("HOME"));
+            }
+        } else if (strcmp(program, "exit") == 0) {
+            // Handle the 'exit' built-in command
+            if (argv[1] != NULL) {
+                int exit_code = atoi(argv[1]);
+                exit(exit_code);
+            } else {
+                exit(0); // Exit with the default exit code
+            }
+        } else {
+            // If it's not a built-in command, you can execute it here
+            // Example: Execute external commands using fork and exec
+            // ...
+        }
+    }
+
+
+    if (prompt){
+        sprintf(prompt, "unix_shell %s $ ", current_working_directory);
+    }
+    
+}
