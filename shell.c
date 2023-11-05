@@ -1,3 +1,4 @@
+// Including the necessary libraries
 #include "parser/ast.h"
 #include "shell.h"
 #include <stdio.h>
@@ -9,173 +10,152 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
+#include <signal.h>
+#include <readline/readline.h>
+#include <readline/history.h>
 
-void ls(const char*);
-void c_uname();
+// Function Declaraions c_ means custom in this case
+void c_uname(void);
 void c_echo(size_t, char**);
-void cd(size_t, char**);
+void c_cd(size_t, char**);
 void c_sleep(size_t, char**);
 void c_mkdir(size_t, char**);
 void c_exit(size_t, char**);
+void c_sigint_handler(int);
 
+// Some Global variables
 char* current_working_directory;
 char* new_directory;
 
+
+
 void initialize(void)
 {
-    //new_directory = malloc(1);
-    new_directory = getenv("PWD");
-    current_working_directory = malloc(strlen(new_directory) + 1); // +1 for the null terminator
+
+    new_directory = getenv("PWD");                                  // making new directory equal to the working directory of the environment
+
+    current_working_directory = malloc(strlen(new_directory) + 1); // allocating memory, +1 for the null terminator
+
     if (current_working_directory) {
-        strcpy(current_working_directory, new_directory);
+        strcpy(current_working_directory, new_directory);           // copying current working directory into the new_directory variable
     }
 
-    /* This code will be called once at startup */
+    signal(SIGINT, c_sigint_handler);                               // setting up the ctrl-c signal handler
+
     if (prompt){
         prompt = (char*)malloc(256);
-        sprintf(prompt, "unix_shell %s $ ", current_working_directory);
+        sprintf(prompt, "unix_shell %s $ ", current_working_directory); // storing data in the prompt to be printed
     }
 
 }
 
+
+
 void run_command(node_t *node)
 {
-    /* Print parsed input for testing - comment this when running the tests! */
-    //print_tree(node);
 
-    if (node->type == NODE_COMMAND) {
+    if (node->type == NODE_COMMAND) {                               // Handling commands
 
-        
-        if (strcmp(node->command.program, "_ls") == 0) {
-        
-            //printf("Executing 'ls' command\n");
+        // Here if the command matches any of the given names the respective function is called
 
-            if (node->command.argc > 1) {
-
-                ls(node->command.argv[1]);
-            
-            } else {
-            
-                ls(".");
-            
-            }
-            printf("\n");
-
-        } else if (strcmp(node->command.program, "uname") == 0)
+        if (strcmp(node->command.program, "uname") == 0)            // uname
         {
             c_uname();
             
         }
-        else if (strcmp(node->command.program, "mkdir") == 0){
+        else if (strcmp(node->command.program, "mkdir") == 0){      // mkdir
 
             c_mkdir(node->command.argc, node->command.argv);
         
         }
-        else if (strcmp(node->command.program, "echo") == 0)
+        else if (strcmp(node->command.program, "echo") == 0)        // echo
         {
             
             c_echo(node->command.argc, node->command.argv);
 
         } 
-        else if (strcmp(node->command.program, "exit") == 0) {
+        else if (strcmp(node->command.program, "exit") == 0) {      // exit
             
             c_exit(node->command.argc, node->command.argv);
         
         } 
-        else if (strcmp(node->command.program, "cd") == 0)
+        else if (strcmp(node->command.program, "cd") == 0)          // cd
         {
-            cd(node->command.argc, node->command.argv);
+            c_cd(node->command.argc, node->command.argv);
+        }
+        else if (strcmp(node->command.program, "sleep") == 0)       // sleep
+        {
+            c_sleep(node->command.argc, node->command.argv);
         }
         else
         {
             // using execvp when the command does not match any of the already implimented commands
 
             pid_t pid = fork();
+
             if (pid < 0) {
+
                 perror("Fork failed");
+            
             } else if (pid == 0) {
                 // Child process
-                execvp(node->command.argv[0], node->command.argv);
-                perror("execvp failed");
+
+                    execvp(node->command.argv[0], node->command.argv);
+                    perror("execvp failed");
+                
+                
+                
             } else {
-                // Parent process
+
+                // waiting for the Parent process
                 int status;
                 wait(&status);
                 
-                if (WIFEXITED(status) && WEXITSTATUS(status) == 0) { // Child process executed successfully
+                if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {            // Child process executed successfully
                 } else {
                     perror("Child process failed");
                 }
             }
 
         }
-        
-        
-        //else {
-            
-        //    printf("unix_shell: %s: command not found...\n",node->command.program);
-            
-        //}
+
     }
-    else if (node->type == NODE_SEQUENCE)
+    else if (node->type == NODE_SEQUENCE)               // Handling a sequence of commands
     {
-        // Handle sequence of commands
-        node_t *current_node = node->sequence.first;
 
-        while (current_node != NULL) {
-            run_command(current_node);
-            current_node = current_node->sequence.second;
-        }
+        // resursively running the first and second command
+
+        run_command(node->sequence.first);              
+        run_command(node->sequence.second);
         
     }
-    
-    
 	
+
     if (prompt){
-        sprintf(prompt, "unix_shell %s $ ", current_working_directory);
+        sprintf(prompt, "unix_shell %s $ ", current_working_directory);     // Updating directory just in case
     }
 }
 
 
+void c_uname(void) {                        // implementing uname: this command gives data of the system
 
-
-
-void ls(const char *directory) {
-    DIR *dir;
-    struct dirent *entry;
-
-    dir = opendir(directory);
-    if (dir == NULL) {
-        perror("opendir error: this path coud possibly not be a directory!!");
-        return;
-    }
-
-    while ((entry = readdir(dir)) != NULL) {
-        if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
-            printf("%s\n", entry->d_name);
-        }
-    }
-
-    closedir(dir);
-}
-
-void c_uname() {
     struct utsname uname_data;
-    if (uname(&uname_data) == -1) {
+
+    if (uname(&uname_data) == -1) {         // checking if uname works
         perror("uname");
         return;
     }
 
-    printf("%s\n", uname_data.sysname);
+    printf("%s\n", uname_data.sysname);     // Printing just the system name
 }
 
-void c_echo(size_t argument_number, char** arguments) {
+void c_echo(size_t argument_number, char** arguments) {     // Implementing echo
     
-    if (argument_number > 1 && !strcmp(arguments[1], "-n")) {
+    if (argument_number > 1 && !strcmp(arguments[1], "-n")) {   //If -n flag is present no new line is printed
 
         printf("%s",arguments[2]);
     
-    } else {
+    } else {                                                    // otherwise the given argument and a new line are printed
         
         printf("%s\n", arguments[1]);
     
@@ -183,26 +163,34 @@ void c_echo(size_t argument_number, char** arguments) {
 
 }
 
-void cd(size_t argument_number, char** arguments) {
+void c_cd(size_t argument_number, char** arguments) {             // implementing cd i.e change directory
+
     if (argument_number > 1)
     {
         
-        DIR *dir = opendir(arguments[1]);
-        if (dir == NULL)
+        DIR *dir = opendir(arguments[1]);                       // making pointer of type DIR i.e it holds an open directory
+
+        if (dir == NULL)                                        // if it returns NULL then no directory present and so no directory was opened so, exiting after printing error
         {
-            closedir(dir);
+            closedir(dir);                                      // closing directory just in case
             perror("This directory does not exist or is not a directory");
+            return;
         }
-        else
-        {
+        else                                                    
+        {                                                       
             closedir(dir);
 
-            if (realpath(arguments[1], new_directory) == NULL) {
-                perror("cd error");
-            } else {
-                if (chdir(new_directory) == 0) {
+            if (realpath(arguments[1], new_directory) == NULL) {    // else we copy the relative path into the new_drectory
 
-                    current_working_directory = strdup(new_directory);
+                perror("cd error");
+            
+            } else {
+            
+                if (chdir(new_directory) == 0) {                        // change the directory to new_directory
+                    
+                    free(current_working_directory);                    // free the current_working_directory memory buffer
+                    
+                    current_working_directory = strdup(new_directory);  // making a duplicate and storing it in current working directory
                     
                 } else {
                     perror("cd error");
@@ -210,29 +198,32 @@ void cd(size_t argument_number, char** arguments) {
             }
 
         }
-    } else
+    } else                                                              // If no directory is specified then we will default onto what bash does i.e change directory to the home directory from the environment variables
     {
         chdir(getenv("HOME"));
-        current_working_directory = getenv("HOME");
+
+        free(current_working_directory);                                // We do the same free the buffer
+
+        current_working_directory = getenv("HOME");                     // save the HOME environment variable i.e the home directory to the current_working_directory
     }
     
-    
-    
-    //printf("%s\n",current_working_directory);
 }
 
-void c_sleep(size_t argument_number, char** arguments){
+void c_sleep(size_t argument_number, char** arguments){                 // implementinf sleep
+
     if (argument_number > 1)
     {
-        sleep(atoi(arguments[1]));
+        sleep(atoi(arguments[1]));                                      // sleep for a given number of seconds
+
     }
     
 }
 
-void c_mkdir(size_t argument_number, char** arguments) {
-    if (argument_number > 1 && argument_number < 2)
+void c_mkdir(size_t argument_number, char** arguments) {                // mkdir
+
+    if (argument_number > 1)
     {
-        if (mkdir(arguments[1], 0777) == 0) {
+        if (mkdir(arguments[1], 0777) == 0) {                           // making a new directory using the system call mkdir the argument[1] is the directory name, 0777 is the access specifier in this case the owner has full access, read and write
             printf("Directory '%s' created.\n", arguments[1]);
         } else {
             perror("mkdir");
@@ -240,30 +231,42 @@ void c_mkdir(size_t argument_number, char** arguments) {
     }
     else
     {
-        printf("mkdir usage:\n\tmkdir <directory name to be created>");
+        printf("mkdir usage:\n\tmkdir <directory name to be created>"); // printing help if mkdir fails or is wrongly used
     }
     
 }
 
+void c_sigint_handler(int signal_number) {                              // function that will handle ctrl-c
+    
+    if (signal_number == SIGINT)
+    {
+        rl_on_new_line();                       // Moving to a new line after Ctrl+C to print prompt on new line
+        rl_replace_line("", 0);                 // Clearing the current input line
+        printf("\n");                           // printing new line
+        rl_redisplay();                         // rediaplay the input
+    }
+}
 
 
-void c_exit(size_t argument_number, char** arguments) {
+void c_exit(size_t argument_number, char** arguments) {             // implementing the exit function
+
     if (prompt)
     {
-        free(prompt);
+        free(prompt);                                               // freeing memory buffer of prompt
     }
     
-    free(current_working_directory);
-    int exit_return = 0;
-    if (argument_number > 1)
+    free(current_working_directory);                                // freeing current_working_directory
+
+    int exit_return = 0;                                            // making exit_return 0
+
+    if (argument_number > 1)                                        // if there is another argument
     {
-        exit_return = atoi(arguments[1]);
+        exit_return = atoi(arguments[1]);                           // then we return with that number as the exit code
         exit(exit_return);
     }
     else
     {
-        exit(exit_return);
+        exit(exit_return);                                          // otherwise we exit with 0
     }
-    
     
 }
